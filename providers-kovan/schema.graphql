@@ -1,0 +1,72 @@
+type Provider @entity {
+  "Provider's address"
+  id: ID!
+  "Provider's public key"
+  pubkey: BigInt!
+  "Provider's title encoded in bytes"
+  title: Bytes!
+  "Array of the endpoints this provider has brokered"
+  endpoints: [Endpoint!] @derivedFrom(field: "provider")
+  "Array of Provider parameters"
+  provider_params: [Provider_Param!] @derivedFrom(field: "provider")
+}
+
+type Provider_Param @entity {
+  "Tx hash of the setProviderParam transaction"
+  id: ID!
+  "Provider this param belongs to"
+  provider: Provider!
+  key: Bytes!
+  value: Bytes
+}
+
+type Endpoint @entity {
+  id: ID!
+  "Endpoint's title as bytes"
+  endpointBytes: Bytes!
+  "Provider that this endpoint belongs to"
+  provider: Provider!
+  "Address of the broker that created this endpoint"
+  broker: String!
+  "Coefficient array of this endpoint's curve"
+  curve: [BigInt!]
+  "Endpoint's title as a string"
+  endpointStr: String!
+  "The number of dots issued from this endpoint's curve"
+  dotsIssued: BigInt
+  "The maximum cost per dot"
+  dotLimit: BigInt
+  "Current spot price of endpoint"
+  spotPrice: BigInt!
+  "The number of ZAP tokens bounded to this endpoint"
+  zapBound: BigInt
+  "Whether or not this endpoint is a token"
+  isToken: Boolean
+  "If this endpoint is a token, this property displays it's symbol"
+  symbol: String
+  "Token's symbol as bytes"
+  symbolBytes: Bytes
+  "If this endpoint is a token, this property displays it's address"
+  tokenAdd: String
+  "The timestamp of the block submitted upon endpoint creation"
+  timestamp: BigInt
+}
+
+type User @entity {
+  "User's wallet address"
+  id: ID!
+  "An array of endpoints the user is bound to and how much dots bounded to each"
+  userBound: [Bond!] @derivedFrom(field: "user")
+}
+
+type Bond @entity {
+  id: ID!
+  "The bounded endpoint"
+  endpoint: Endpoint
+  "The user this endpoint is bounded to"
+  user: User!
+  "The number of dots bounded to the endpoint"
+  bounded: BigInt
+  "The timestamp of the block submitted upon binding to the endpoint"
+  timestamp: BigInt
+}
