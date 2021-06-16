@@ -61,7 +61,13 @@ export function handleBound(event: Bound): void {
     }
     log.info("Succesfully Bonded to {}.", [endpoint.endpointStr])    
     
-    endpoint.spotPrice = bondage.calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
+    const spotPrice = bondage.try_calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
+    if (!spotPrice.reverted) {
+      endpoint.spotPrice = spotPrice.value
+    } else {
+      log.warning("Error with getting spotprice for {}", [endpoint.endpointStr])
+      return
+    }
 
     // save the entities
     endpoint.save()
@@ -129,7 +135,13 @@ export function handleUnbound(event: Unbound): void {
     }
   }
 
-  endpoint.spotPrice = bondage.calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
+  const spotPrice = bondage.try_calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
+  if (!spotPrice.reverted) {
+    endpoint.spotPrice = spotPrice.value
+  } else {
+    log.warning("Error with getting spotprice for {}", [endpoint.endpointStr])
+    return
+  }
 
   log.info("Successfully unbonded to {}.", [endpoint.endpointStr])
   endpoint.save()
