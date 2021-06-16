@@ -6,7 +6,7 @@ dataSources:
     name: Registry
     network: mainnet
     source:
-      address: "0xc7ab7ffc4fc2f3c75ffb621f574d4b9c861330f0"
+      address: "0xC7Ab7FFc4FC2f3C75FfB621f574d4b9c861330f0"
       abi: Registry
       startBlock: 7038734
     mapping:
@@ -43,7 +43,7 @@ dataSources:
     name: Bondage
     network: mainnet
     source:
-      address: "0x188f79b0a8edc10ad53285c47c3feaa0d2716e83"
+      address: "0x188f79B0a8EdC10aD53285c47c3fEAa0D2716e83"
       abi: Bondage
       startBlock: 6976654
     mapping:
@@ -80,9 +80,9 @@ dataSources:
     name: TokenDotFactory
     network: mainnet
     source:
-      address: "0x2416002d127175bc2d627faefdaa4186c7c49833"
+      address: "0xe13fef4c8e75c12f9706e8bdf28fe847ce99cb42"
       abi: TokenDotFactory
-      startBlock: 7052396
+      startBlock: 7052391
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.4
