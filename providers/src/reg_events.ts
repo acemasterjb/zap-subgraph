@@ -1,4 +1,5 @@
-import { BigInt, Address, log, ethereum } from "@graphprotocol/graph-ts"
+import { BigInt, Address, log } from "@graphprotocol/graph-ts"
+
 import {
   Registry,
   NewProvider,
@@ -7,23 +8,30 @@ import {
   SetEndpointParamsCall,
   SetProviderParameterCall
 } from "../generated/Registry/Registry"
-// import { TokenDotFactory } from "../generated/TokenDotFactory/TokenDotFactory"
-import { ERC20 } from "../generated/ERC20/ERC20"
+
+import { ERC20 } from "../generated/Registry/ERC20"
 import { Bondage } from "../generated/Bondage/Bondage"
 import { TokenDotFactory } from "../generated/TokenDotFactory/TokenDotFactory"
 import { Provider, Endpoint, Provider_Param } from "../generated/schema"
 
+import {getEnd, getZapRequired} from "./utils"
+
 // Contract Addresses
-let REGADDRESS = Address.fromString("0xc7ab7ffc4fc2f3c75ffb621f574d4b9c861330f0")
-let BONDADDRESS = Address.fromString("0x188f79b0a8edc10ad53285c47c3feaa0d2716e83")
+let REGADDRESS = Address.fromString("0xC7Ab7FFc4FC2f3C75FfB621f574d4b9c861330f0")
+let BONDADDRESS = Address.fromString("0x188f79B0a8EdC10aD53285c47c3fEAa0D2716e83")
 // let TDFADDRESS = Address.fromString("0x2416002d127175bc2d627faefdaa4186c7c49833")
 
 // Handles a new provider that can either be an Oracle or a Token
 export function handleNewProvider(event: NewProvider): void {
-  let provider = new Provider(event.params.provider.toHex())
+  let provider = new Provider(event.params.provider.toHexString())
   let registry = Registry.bind(REGADDRESS)  // Connection to the registry contract
 
-  provider.pubkey = registry.getProviderPublicKey(event.params.provider)
+  let public_key = registry.try_getProviderPublicKey(event.params.provider)
+  if (public_key.reverted){
+    return
+  } else {
+    provider.pubkey = public_key.value
+  }
   provider.title = event.params.title
 
   provider.save()
@@ -42,16 +50,22 @@ export function handleNewCurve(event: NewCurve): void {
   // let factory = Factory.load(provider.id)
   let endpoint = new Endpoint(event.params.endpoint.toHex())
 
+
   endpoint.provider = provider.id
   endpoint.broker = event.params.broker.toHex()
   endpoint.endpointStr = event.params.endpoint.toString()
   endpoint.curve = event.params.curve
   endpoint.oracleTitle = endpoint.endpointStr
-  endpoint.dotsIssued = bondage.getDotsIssued(Address.fromString(provider.id), event.params.endpoint)
-  endpoint.costPerDot = bondage.calcZapForDots(Address.fromString(provider.id), event.params.endpoint, BigInt.fromI32(1))
+  endpoint.dotsIssued = bondage.getDotsIssued(event.params.provider, event.params.endpoint)
+  endpoint.spotPrice = getZapRequired(endpoint.dotsIssued, BigInt.fromI32(1), getEnd(event.params.curve), event.params.curve)
+  if (endpoint.spotPrice == BigInt.fromI32(0)){
+    log.warning("Unable to get spotprice from {}", [endpoint.endpointStr])
+  }
+  // endpoint.spotPrice = bondage.calcZapForDots(event.params.provider, event.params.endpoint, BigInt.fromString("1"))
+  endpoint.timestamp = event.block.timestamp
 
   // try to get the endpoint's Dot Limit, it's null if there is an issue getting it
-  let dotLimitResult = bondage.try_dotLimit(Address.fromString(provider.id), event.params.endpoint)
+  let dotLimitResult = bondage.try_dotLimit(event.params.provider, event.params.endpoint)
   if (dotLimitResult.reverted) {
     endpoint.dotLimit = null
     log.debug("Issue with getting dotLimit of {}", [endpoint.endpointStr])
@@ -84,8 +98,6 @@ export function handleNewCurve(event: NewCurve): void {
       endpoint.isToken = false
     }
   }
-  // push the new endpoint to the provider's list of endpoints
-  provider.endpoints.push(endpoint.id)
 
   // Save the new endpoint entity and the provider entity with the added endpoint
   endpoint.save()
@@ -107,24 +119,7 @@ export function handleOwnershipTransferred(event: OwnershipTransferred): void {
 
 // Sets the parameters of an endpoint and updates it
 export function handleSetEndpointParameter(call: SetEndpointParamsCall): void {
-  let id = call.inputs.endpoint.toHex()
-  let endpoint = Endpoint.load(id)  // load the endpoint if it exists...
-  if (endpoint == null) {
-    // if not create a new one
-    endpoint = new Endpoint(id)
-  }
-
-  if (endpoint.endpointParams == null) {
-    // if there is no existing endpoint param extablish it...
-    endpoint.endpointParams = call.inputs.endpointParams
-
-  } else {
-    // if not then append it
-    endpoint.endpointParams.concat(call.inputs.endpointParams)
-  }
-
-  endpoint.save()  // save changes to endpoint entity
-  log.info("Enpoint Parameter added for {}", [endpoint.endpointStr])
+  
 }
 
 // Creates a new Provider_Param entity.
@@ -142,6 +137,8 @@ export function handleSetProviderParameter(call: SetProviderParameterCall): void
 
   provider_param.provider = provider.id
   provider.provider_params.push(provider_param.id)  // add provider params to provider
+
+  
 
   // save the provider and it's param entity
   provider.save()
