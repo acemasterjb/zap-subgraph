@@ -1,4 +1,4 @@
-import { BigInt, Address, log, Bytes, ByteArray } from "@graphprotocol/graph-ts"
+import { BigInt, Address, log, DataSourceContext } from "@graphprotocol/graph-ts"
 
 import {
   Registry,
@@ -9,9 +9,8 @@ import {
   SetProviderParameterCall
 } from "../generated/Registry/Registry"
 
-import { ERC20 } from "../generated/Registry/ERC20"
-import { Bondage } from "../generated/Bondage/Bondage"
-import { TokenDotFactory } from "../generated/TokenDotFactory/TokenDotFactory"
+import { Bondage } from "../generated/Registry/Bondage"
+import { TokenDotFactory } from "../generated/templates"
 import { Provider, Endpoint, Provider_Param } from "../generated/schema"
 
 // Contract Addresses
@@ -32,6 +31,10 @@ export function handleNewProvider(event: NewProvider): void {
     provider.pubkey = public_key.value
   }
   provider.title = event.params.title
+
+  let context = new DataSourceContext()
+  context.setString("provider", event.params.provider.toHexString())
+  TokenDotFactory.createWithContext(event.params.provider, context)
 
   provider.save()
   log.info('Added provider {}', [provider.title.toString()])
@@ -61,7 +64,13 @@ export function handleNewCurve(event: NewCurve): void {
   } else {
     endpoint.dotsIssued = BigInt.fromI32(0)
   }
-  endpoint.spotPrice = bondage.currentCostOfDot(event.params.provider, event.params.endpoint, dotsIssued.value)
+  let spotPrice = bondage.try_calcZapForDots(event.params.provider, event.params.endpoint, BigInt.fromI32(1))
+    if (!spotPrice.reverted) {
+      endpoint.spotPrice = spotPrice.value
+    } else {
+      log.warning("Error with getting spotprice for {}", [endpoint.endpointStr])
+      return
+    }
   endpoint.timestamp = event.block.timestamp
 
   // try to get the endpoint's Dot Limit, it's null if there is an issue getting it
@@ -71,33 +80,6 @@ export function handleNewCurve(event: NewCurve): void {
     log.debug("Issue with getting dotLimit of {}", [endpoint.endpointStr])
   } else {
     endpoint.dotLimit = dotLimitResult.value
-  }
-
-  let tdf = TokenDotFactory.bind(event.params.provider)
-
-  let tokenAddResult = tdf.try_curves(event.params.endpoint)
-  if (tokenAddResult.reverted) {
-    endpoint.tokenAdd = null
-    log.debug("Issue with getting token address for {}", [endpoint.endpointStr])
-  } else {
-    endpoint.tokenAdd = tokenAddResult.value.toHex()
-    if (endpoint.tokenAdd != null) {
-      // if the endpoint is a token then get more metadata on it...
-      endpoint.isToken = true
-      // connection to the token's ERC20 contract
-      let token = ERC20.bind(tokenAddResult.value)
-
-      let symbolResult = token.try_symbol()  // try to get the token's symbol
-      if (symbolResult.reverted) {
-        endpoint.symbol = null
-        log.debug("Issue with getting token symbol for {}", [endpoint.endpointStr])
-      } else {
-        endpoint.symbol = symbolResult.value
-        endpoint.symbolBytes = Bytes.fromUTF8(symbolResult.value) as Bytes
-      }
-    } else {
-      endpoint.isToken = false
-    }
   }
 
   provider.endpoints.push(endpoint.id)

@@ -8,8 +8,8 @@ import {
   Returned,
   OwnershipTransferred
 } from "../generated/Bondage/Bondage"
-import { Registry } from "../generated/Registry/Registry"
-import { Provider, Endpoint, User, Bond } from "../generated/schema"
+import { Registry } from "../generated/Bondage/Registry"
+import { Endpoint, User, Bond } from "../generated/schema"
 
 // Contract Addresses
 let BONDADDRESS = Address.fromString("0x6164d3A0644324155cd2ad5CDDe5e01c073b79f1")
@@ -61,7 +61,7 @@ export function handleBound(event: Bound): void {
     }
     log.info("Succesfully Bonded to {}.", [endpoint.endpointStr])    
     
-    const spotPrice = bondage.try_calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
+    let spotPrice = bondage.try_calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
     if (!spotPrice.reverted) {
       endpoint.spotPrice = spotPrice.value
     } else {
@@ -135,7 +135,7 @@ export function handleUnbound(event: Unbound): void {
     }
   }
 
-  const spotPrice = bondage.try_calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
+  let spotPrice = bondage.try_calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
   if (!spotPrice.reverted) {
     endpoint.spotPrice = spotPrice.value
   } else {

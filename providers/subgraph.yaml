@@ -99,3 +99,34 @@ dataSources:
         - event: OwnershipTransferred(indexed address,indexed address)
           handler: handleOwnershipTransferred
       file: ./src/tdf_events.ts
+templates:
+  - name: TokenDotFactory
+    kind: ethereum/contract
+    network: mainnet
+    source:
+      abi: TokenDotFactory
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.4
+      language: wasm/assemblyscript
+      file: ./src/tdf_events.ts
+      entities:
+        - DotTokenCreated
+        - OwnershipTransferred
+      abis:
+        - name: TokenDotFactory
+          file: ./abis/TokenDotFactory.json
+        - name: Bondage
+          file: ./abis/Bondage.json
+        - name: ERC20
+          file: ./abis/ERC20.json
+      eventHandlers:
+        - event: DotTokenCreated(address)
+          handler: handleDotTokenCreated
+        - event: OwnershipTransferred(indexed address,indexed address)
+          handler: handleOwnershipTransferred
+      callHandlers:
+        - function: initializeCurve(bytes32,bytes32,int256[])
+          handler: handleInitializeCurve
+
+

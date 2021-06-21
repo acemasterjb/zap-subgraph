@@ -9,9 +9,7 @@ import {
   OwnershipTransferred
 } from "../generated/Bondage/Bondage"
 import { Registry } from "../generated/Registry/Registry"
-import { Provider, Endpoint, User, Bond } from "../generated/schema"
-
-import {getEnd, getZapRequired} from "./utils"
+import { Endpoint, User, Bond } from "../generated/schema"
 
 // Contract Addresses
 let BONDADDRESS = Address.fromString("0x188f79B0a8EdC10aD53285c47c3fEAa0D2716e83")
@@ -63,13 +61,12 @@ export function handleBound(event: Bound): void {
     }
     log.info("Succesfully Bonded to {}.", [endpoint.endpointStr])    
     
-    const curve = registry.try_getProviderCurve(event.params.oracle, event.params.endpoint)
-    const dotsIssued = bondage.try_getDotsIssued(event.params.oracle, event.params.endpoint)
-    if (!curve.reverted && !dotsIssued.reverted){
-      endpoint.spotPrice = getZapRequired(dotsIssued.value, BigInt.fromI32(1), getEnd(curve.value), curve.value)
-      if (endpoint.spotPrice == BigInt.fromI32(0)){
-        log.warning("Unable to get spotprice from {}", [endpoint.endpointStr])
-      }
+    let spotPrice = bondage.try_calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
+    if (!spotPrice.reverted) {
+      endpoint.spotPrice = spotPrice.value
+    } else {
+      log.warning("Error with getting spotprice for {}", [endpoint.endpointStr])
+      return
     }
 
     // save the entities
@@ -138,13 +135,12 @@ export function handleUnbound(event: Unbound): void {
     }
   }
 
-  const curve = registry.try_getProviderCurve(event.params.oracle, event.params.endpoint)
-  const dotsIssued = bondage.try_getDotsIssued(event.params.oracle, event.params.endpoint)
-  if (!curve.reverted && !dotsIssued.reverted){
-    endpoint.spotPrice = getZapRequired(dotsIssued.value, BigInt.fromI32(1), getEnd(curve.value), curve.value)
-    if (endpoint.spotPrice == BigInt.fromI32(0)){
-      log.warning("Unable to get spotprice from {}", [endpoint.endpointStr])
-    }
+  let spotPrice = bondage.try_calcZapForDots(event.params.oracle, event.params.endpoint, BigInt.fromI32(1))
+  if (!spotPrice.reverted) {
+    endpoint.spotPrice = spotPrice.value
+  } else {
+    log.warning("Error with getting spotprice for {}", [endpoint.endpointStr])
+    return
   }
 
   log.info("Successfully unbonded to {}.", [endpoint.endpointStr])

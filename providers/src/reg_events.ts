@@ -1,4 +1,4 @@
-import { BigInt, Address, log } from "@graphprotocol/graph-ts"
+import { BigInt, Address, log, DataSourceContext } from "@graphprotocol/graph-ts"
 
 import {
   Registry,
@@ -9,12 +9,10 @@ import {
   SetProviderParameterCall
 } from "../generated/Registry/Registry"
 
-import { ERC20 } from "../generated/Registry/ERC20"
 import { Bondage } from "../generated/Bondage/Bondage"
-import { TokenDotFactory } from "../generated/TokenDotFactory/TokenDotFactory"
+import { TokenDotFactory } from "../generated/templates"
 import { Provider, Endpoint, Provider_Param } from "../generated/schema"
 
-import {getEnd, getZapRequired} from "./utils"
 
 // Contract Addresses
 let REGADDRESS = Address.fromString("0xC7Ab7FFc4FC2f3C75FfB621f574d4b9c861330f0")
@@ -28,11 +26,16 @@ export function handleNewProvider(event: NewProvider): void {
 
   let public_key = registry.try_getProviderPublicKey(event.params.provider)
   if (public_key.reverted){
+    log.error('Unable to add provider: {}', [event.params.title.toString()])
     return
   } else {
     provider.pubkey = public_key.value
   }
   provider.title = event.params.title
+
+  let context = new DataSourceContext()
+  context.setString("provider", event.params.provider.toHexString())
+  TokenDotFactory.createWithContext(event.params.provider, context)
 
   provider.save()
   log.info('Added provider {}', [provider.title.toString()])
@@ -44,7 +47,7 @@ export function handleNewProvider(event: NewProvider): void {
 export function handleNewCurve(event: NewCurve): void {
   let bondage = Bondage.bind(BONDADDRESS)  // Connection to the bondage contract
   // Load the provider that the endpoint belongs to
-  let provider = Provider.load(event.params.provider.toHex())
+  let provider = Provider.load(event.params.provider.toHexString())
   if (provider == null) return
   // Load the provider's token factory if it exists
   // let factory = Factory.load(provider.id)
@@ -55,17 +58,24 @@ export function handleNewCurve(event: NewCurve): void {
   endpoint.broker = event.params.broker.toHex()
   endpoint.endpointStr = event.params.endpoint.toString()
   endpoint.curve = event.params.curve
-  endpoint.oracleTitle = endpoint.endpointStr
-  endpoint.dotsIssued = bondage.getDotsIssued(event.params.provider, event.params.endpoint)
-  endpoint.spotPrice = getZapRequired(endpoint.dotsIssued, BigInt.fromI32(1), getEnd(event.params.curve), event.params.curve)
-  if (endpoint.spotPrice == BigInt.fromI32(0)){
-    log.warning("Unable to get spotprice from {}", [endpoint.endpointStr])
+  endpoint.endpointBytes = event.params.endpoint
+  let dotsIssued = bondage.try_getDotsIssued(Address.fromString(provider.id), event.params.endpoint)
+  if (!dotsIssued.reverted) {
+    endpoint.dotsIssued = dotsIssued.value
+  } else {
+    endpoint.dotsIssued = BigInt.fromI32(0)
   }
-  // endpoint.spotPrice = bondage.calcZapForDots(event.params.provider, event.params.endpoint, BigInt.fromString("1"))
+  let spotPrice = bondage.try_calcZapForDots(event.params.provider, event.params.endpoint, BigInt.fromI32(1))
+    if (!spotPrice.reverted) {
+      endpoint.spotPrice = spotPrice.value
+    } else {
+      log.warning("Error with getting spotprice for {}", [endpoint.endpointStr])
+      return
+    }
   endpoint.timestamp = event.block.timestamp
 
   // try to get the endpoint's Dot Limit, it's null if there is an issue getting it
-  let dotLimitResult = bondage.try_dotLimit(event.params.provider, event.params.endpoint)
+  let dotLimitResult = bondage.try_dotLimit(Address.fromString(provider.id), event.params.endpoint)
   if (dotLimitResult.reverted) {
     endpoint.dotLimit = null
     log.debug("Issue with getting dotLimit of {}", [endpoint.endpointStr])
@@ -73,31 +83,7 @@ export function handleNewCurve(event: NewCurve): void {
     endpoint.dotLimit = dotLimitResult.value
   }
 
-  let tdf = TokenDotFactory.bind(event.params.provider)
-
-  let tokenAddResult = tdf.try_curves(event.params.endpoint)
-  if (tokenAddResult.reverted) {
-    endpoint.tokenAdd = null
-    log.debug("Issue with getting token address for {}", [endpoint.endpointStr])
-  } else {
-    endpoint.tokenAdd = tokenAddResult.value.toHex()
-    if (endpoint.tokenAdd != null) {
-      // if the endpoint is a token then get more metadata on it...
-      endpoint.isToken = true
-      // connection to the token's ERC20 contract
-      let token = ERC20.bind(tokenAddResult.value)
-
-      let symbolResult = token.try_symbol()  // try to get the token's symbol
-      if (symbolResult.reverted) {
-        endpoint.symbol = null
-        log.debug("Issue with getting token symbol for {}", [endpoint.endpointStr])
-      } else {
-        endpoint.symbol = symbolResult.value
-      }
-    } else {
-      endpoint.isToken = false
-    }
-  }
+  provider.endpoints.push(endpoint.id)
 
   // Save the new endpoint entity and the provider entity with the added endpoint
   endpoint.save()

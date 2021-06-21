@@ -76,26 +76,33 @@ dataSources:
         - event: OwnershipTransferred(indexed address,indexed address)
           handler: handleOwnershipTransferred
       file: ./src/bond_events.ts
-  - kind: ethereum/contract
-    name: TokenDotFactory
+templates:
+  - name: TokenDotFactory
+    kind: ethereum/contract
     network: kovan
     source:
-      address: "0xeC97E4896cF9f067a9dD428760316024EA0cfc12"
       abi: TokenDotFactory
-      startBlock: 24054849
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.4
       language: wasm/assemblyscript
+      file: ./src/tdf_events.ts
       entities:
         - DotTokenCreated
         - OwnershipTransferred
       abis:
         - name: TokenDotFactory
           file: ./abis/TokenDotFactory.json
+        - name: Bondage
+          file: ./abis/Bondage.json
+        - name: ERC20
+          file: ./abis/ERC20.json
       eventHandlers:
         - event: DotTokenCreated(address)
           handler: handleDotTokenCreated
         - event: OwnershipTransferred(indexed address,indexed address)
           handler: handleOwnershipTransferred
-      file: ./src/tdf_events.ts
+      callHandlers:
+        - function: initializeCurve(bytes32,bytes32,int256[])
+          handler: handleInitializeCurve
+
