@@ -120,6 +120,8 @@ templates:
           file: ./abis/Bondage.json
         - name: ERC20
           file: ./abis/ERC20.json
+        - name: Registry
+          file: ./abis/Registry.json
       eventHandlers:
         - event: DotTokenCreated(address)
           handler: handleDotTokenCreated
@@ -128,5 +130,7 @@ templates:
       callHandlers:
         - function: initializeCurve(bytes32,bytes32,int256[])
           handler: handleInitializeCurve
-
-
+        - function: bond(bytes32,uint256)
+          handler: handleBond
+        - function: unbond(bytes32,uint256)
+          handler: handleUnbond

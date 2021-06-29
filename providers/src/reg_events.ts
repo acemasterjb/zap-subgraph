@@ -11,18 +11,22 @@ import {
 
 import { Bondage } from "../generated/Bondage/Bondage"
 import { TokenDotFactory } from "../generated/templates"
-import { Provider, Endpoint, Provider_Param } from "../generated/schema"
+import {TokenDotFactory as tdf_Contract} from "../generated/Registry/TokenDotFactory"
+import { Provider, Endpoint, Provider_Param, User } from "../generated/schema"
 
 
 // Contract Addresses
 let REGADDRESS = Address.fromString("0xC7Ab7FFc4FC2f3C75FfB621f574d4b9c861330f0")
 let BONDADDRESS = Address.fromString("0x188f79B0a8EdC10aD53285c47c3fEAa0D2716e83")
-// let TDFADDRESS = Address.fromString("0x2416002d127175bc2d627faefdaa4186c7c49833")
 
 // Handles a new provider that can either be an Oracle or a Token
 export function handleNewProvider(event: NewProvider): void {
   let provider = new Provider(event.params.provider.toHexString())
   let registry = Registry.bind(REGADDRESS)  // Connection to the registry contract
+  let user = User.load(event.transaction.from.toHex())
+  if (user == null) {
+    user = new User(event.transaction.from.toHex())
+  }
 
   let public_key = registry.try_getProviderPublicKey(event.params.provider)
   if (public_key.reverted){
@@ -33,9 +37,17 @@ export function handleNewProvider(event: NewProvider): void {
   }
   provider.title = event.params.title
 
-  let context = new DataSourceContext()
-  context.setString("provider", event.params.provider.toHexString())
-  TokenDotFactory.createWithContext(event.params.provider, context)
+  let try_tdf = tdf_Contract.bind(event.params.provider)
+  let checkIfContract = try_tdf.try_owner()
+  if (!checkIfContract.reverted){
+    let context = new DataSourceContext()
+    context.setString("provider", event.params.provider.toHexString())
+    TokenDotFactory.createWithContext(event.params.provider, context)
+  } else {
+    log.warning("This provider may not be initialized or in use: {}", [provider.id])
+  }
+
+  provider.owner = user.id
 
   provider.save()
   log.info('Added provider {}', [provider.title.toString()])

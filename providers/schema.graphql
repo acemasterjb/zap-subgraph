@@ -9,6 +9,8 @@ type Provider @entity {
   endpoints: [Endpoint!] @derivedFrom(field: "provider")
   "Array of Provider parameters"
   provider_params: [Provider_Param!] @derivedFrom(field: "provider")
+  "Owner/Broker of this provider"
+  owner: User
 }
 
 type Provider_Param @entity {
@@ -57,6 +59,7 @@ type User @entity {
   id: ID!
   "An array of endpoints the user is bound to and how much dots bounded to each"
   userBound: [Bond!] @derivedFrom(field: "user")
+  tdfsOwned: [Provider!] @derivedFrom(field: "owner")
 }
 
 type Bond @entity {

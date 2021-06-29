@@ -11,16 +11,20 @@ import {
 
 import { Bondage } from "../generated/Registry/Bondage"
 import { TokenDotFactory } from "../generated/templates"
-import { Provider, Endpoint, Provider_Param } from "../generated/schema"
+import { Provider, Endpoint, Provider_Param, User } from "../generated/schema"
 
 // Contract Addresses
 let REGADDRESS = Address.fromString("0x26BC483E8f4E868B031b29973232c188B941a3D8")
 let BONDADDRESS = Address.fromString("0x6164d3A0644324155cd2ad5CDDe5e01c073b79f1")
-// let TDFADDRESS = Address.fromString("0x2416002d127175bc2d627faefdaa4186c7c49833")
 
 // Handles a new provider that can either be an Oracle or a Token
 export function handleNewProvider(event: NewProvider): void {
   let provider = new Provider(event.params.provider.toHexString())
+  let user = User.load(event.transaction.from.toHex())
+  if (user == null) {
+    user = new User(event.transaction.from.toHex())
+  }
+  
   let registry = Registry.bind(REGADDRESS)  // Connection to the registry contract
 
   let public_key = registry.try_getProviderPublicKey(event.params.provider)
@@ -35,6 +39,8 @@ export function handleNewProvider(event: NewProvider): void {
   let context = new DataSourceContext()
   context.setString("provider", event.params.provider.toHexString())
   TokenDotFactory.createWithContext(event.params.provider, context)
+
+  provider.owner = user.id
 
   provider.save()
   log.info('Added provider {}', [provider.title.toString()])

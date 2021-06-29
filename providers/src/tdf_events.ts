@@ -1,17 +1,19 @@
-import { BigInt, Address, log, Bytes, dataSource } from "@graphprotocol/graph-ts"
+import { BigInt, Address, log, Bytes, dataSource, store } from "@graphprotocol/graph-ts"
 import {
+  BondCall,
+  UnbondCall,
   InitializeCurveCall,
-  // TokenDotFactory,
   DotTokenCreated,
   OwnershipTransferred
 } from "../generated/templates/TokenDotFactory/TokenDotFactory"
-import { Provider, Endpoint } from "../generated/schema"
-// import { Registry } from "../../providers-kovan/generated/Registry/Registry"
+import { Provider, Endpoint, User, Bond } from "../generated/schema"
 import { Bondage } from "../generated/templates/TokenDotFactory/Bondage"
+import { Registry } from "../generated/templates/TokenDotFactory/Registry"
 import { ERC20 } from "../generated/templates/TokenDotFactory/ERC20"
 
 // Contract addresses
 let BONDADDRESS = Address.fromString("0x188f79B0a8EdC10aD53285c47c3fEAa0D2716e83")
+let REGADDRESS = Address.fromString("0xC7Ab7FFc4FC2f3C75FfB621f574d4b9c861330f0")
 
 // create a new factory entity and save it.
 export function handleDotTokenCreated(event: DotTokenCreated): void {
@@ -32,6 +34,11 @@ export function handleInitializeCurve(call: InitializeCurveCall): void {
   let endpoint = Endpoint.load(call.inputs.specifier.toHex())
   if (endpoint == null){
     endpoint = new Endpoint(call.inputs.specifier.toHex())
+  }
+
+  let user = User.load(call.from.toHexString())
+  if (user == null){
+    user = new User(call.from.toHexString())
   }
 
   let bondage = Bondage.bind(BONDADDRESS)
@@ -76,9 +83,111 @@ export function handleInitializeCurve(call: InitializeCurveCall): void {
     endpoint.symbolBytes = Bytes.fromUTF8(symbolResult.value) as Bytes
   }
 
-  provider.endpoints.push(endpoint.id)
+  provider.endpoints.push(endpoint.id)  // this endpoint was created by this provider
+  user.tdfsOwned.push(provider.id)  // this provider was created by this user
 
   endpoint.save()
   provider.save()
+  user.save()
   log.info('Added token endpoint {}', [endpoint.endpointStr])
+}
+
+export function handleBond(call: BondCall): void {
+  // load the endpoint if it exists
+  let endpoint = Endpoint.load(call.inputs.specifier.toHex())
+  if (endpoint == null) return
+  let user = User.load(call.from.toHex())
+  if (user == null) {
+    user = new User(call.from.toHex())
+  }
+  let bondID = call.from.toHex() + call.inputs.specifier.toHex()
+  let bond = Bond.load(bondID)
+  if (bond == null) {
+    bond = new Bond(bondID)
+    bond.user = user.id
+    bond.endpoint = endpoint.id
+  }
+
+  let bondage = Bondage.bind(BONDADDRESS)  // connection to the Bondage contract
+  let registry = Registry.bind(REGADDRESS)
+
+  // get the number of dots issued to the endpoint
+  endpoint.dotsIssued = bondage.getDotsIssued(call.to, call.inputs.specifier)
+
+  // try to get the number of zap tokens used to bound to this endpoint
+  let zapBoundResult = bondage.try_getZapBound(call.to, call.inputs.specifier)
+  if (zapBoundResult.reverted) {
+    // Do nothing
+  } else {
+    endpoint.zapBound = zapBoundResult.value
+  }
+
+  // updates the number of user-bound dots
+  if (bond.bounded == BigInt.fromI32(0) || bond.bounded == null){
+    bond.bounded = call.inputs.numDots
+  } else {
+    bond.bounded.plus(call.inputs.numDots)
+  }
+  bond.timestamp = call.block.timestamp
+  bond.save()
+
+  if (!user.userBound.includes(bond.id)) {
+    user.userBound.push(bond.id)
+  }
+  log.info("Succesfully Bonded to {}.", [endpoint.endpointStr])    
+  user.save()
+  
+  let spotPrice = bondage.try_calcZapForDots(call.to, call.inputs.specifier, BigInt.fromI32(1))
+  if (!spotPrice.reverted) {
+    endpoint.spotPrice = spotPrice.value
+    endpoint.save()
+  } else {
+    log.warning("Error with getting spotprice for {}", [endpoint.endpointStr])
+    return
+  }
+}
+
+export function handleUnbond(call: UnbondCall): void {
+  // load the endpoint if it exists
+  let endpoint = Endpoint.load(call.inputs.specifier.toHex())
+  let user = User.load(call.from.toHex())
+  let bondID = (call.from.toHex() + call.inputs.specifier.toHex())
+  let bond = Bond.load(bondID)
+  if (endpoint == null || bond == null || user == null) return
+
+  let bondage = Bondage.bind(BONDADDRESS)
+  let registry = Registry.bind(REGADDRESS)
+
+  // get the number of dots issued to the endpoint
+  endpoint.dotsIssued = bondage.getDotsIssued(call.to, call.inputs.specifier)
+
+  // try to get the number of zap tokens used to bound to this endpoint
+  let zapBoundResult = bondage.try_getZapBound(call.to, call.inputs.specifier)
+  if (zapBoundResult.reverted) {
+    // Do nothing
+  } else {
+    endpoint.zapBound = zapBoundResult.value
+  }
+
+  // updates the number of user-bound dots
+  if (bond.bounded === BigInt.fromI32(0) || bond.bounded == null) {
+    // if the user is not active on the protocol, remove their entity
+    log.info("User no longer bonded to {}, removing Bond entity.", [bond.endpoint])
+    store.remove("Bond", bond.id)
+  } else {
+    bond.bounded.minus(call.inputs.numDots)
+    bond.save()
+  }
+  
+  let spotPrice = bondage.try_calcZapForDots(call.to, call.inputs.specifier, BigInt.fromI32(1))
+  if (!spotPrice.reverted) {
+    endpoint.spotPrice = spotPrice.value
+  } else {
+    log.warning("Error with getting spotprice for {}", [endpoint.endpointStr])
+    return
+  }
+  
+  log.info("Successfully unbonded to {}.", [endpoint.endpointStr])
+  endpoint.save()
+
 }

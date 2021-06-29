@@ -63,10 +63,10 @@ dataSources:
         - name: Registry
           file: ./abis/Registry.json
       eventHandlers:
-        - event: Bound(indexed address,indexed address,indexed bytes32,uint256,uint256)
-          handler: handleBound
-        - event: Unbound(indexed address,indexed address,indexed bytes32,uint256)
-          handler: handleUnbound
+        # - event: Bound(indexed address,indexed address,indexed bytes32,uint256,uint256)
+        #   handler: handleBound
+        # - event: Unbound(indexed address,indexed address,indexed bytes32,uint256)
+        #   handler: handleUnbound
         - event: Escrowed(indexed address,indexed address,indexed bytes32,uint256)
           handler: handleEscrowed
         - event: Released(indexed address,indexed address,indexed bytes32,uint256)
@@ -75,6 +75,11 @@ dataSources:
           handler: handleReturned
         - event: OwnershipTransferred(indexed address,indexed address)
           handler: handleOwnershipTransferred
+      callHandlers:
+        - function: bond(address,bytes32,uint256)
+          handler: handleBound
+        - function: unbond(address,bytes32,uint256)
+          handler: handleUnbound
       file: ./src/bond_events.ts
 templates:
   - name: TokenDotFactory
@@ -97,12 +102,21 @@ templates:
           file: ./abis/Bondage.json
         - name: ERC20
           file: ./abis/ERC20.json
+        - name: Registry
+          file: ./abis/Registry.json
       eventHandlers:
         - event: DotTokenCreated(address)
           handler: handleDotTokenCreated
         - event: OwnershipTransferred(indexed address,indexed address)
           handler: handleOwnershipTransferred
+        # - event: Bonded(indexed bytes32,indexed uint256,indexed address)
+        #   handler: handleBond
+        # - event: Unbonded(indexed bytes32,indexed uint256,indexed address)
+        #   handler: handleUnbond
       callHandlers:
         - function: initializeCurve(bytes32,bytes32,int256[])
           handler: handleInitializeCurve
-
+        - function: bond(bytes32,uint256)
+          handler: handleBond
+        - function: unbond(bytes32,uint256)
+          handler: handleUnbond
